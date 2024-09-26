@@ -2,6 +2,8 @@
 
 Esta API permite cargar un archivo PDF que contiene la imagen de un recibo de pago emitido por el **Servicio de Administración Tributaria del SATP** y extraer automáticamente información clave como el número de recibo, fecha, contribuyente, monto, glosa, entre otros. El objetivo es automatizar el proceso de verificación de recibos de pago, una tarea que antes se realizaba manualmente.
 
+https://github.com/user-attachments/assets/852533fa-cd6a-4302-a97b-b23c0f171d50
+
 ## Características
 
 - **Carga de PDF**: Permite cargar archivos PDF con imágenes de recibos de pago del SATP.
