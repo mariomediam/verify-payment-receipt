@@ -9,7 +9,6 @@ import json
 import base64
 
 # from langchain.chains import create_structured_output_runnable
-from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, PyMuPDFLoader, UnstructuredPDFLoader, PyPDFium2Loader, PDFMinerLoader, AmazonTextractPDFLoader
 from langchain_openai import ChatOpenAI
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
@@ -80,6 +79,8 @@ Debes retornar lo siguiente en formato JSON:
     "gloss": "PERM. DE INGRESO PARA EL TRANSP. ES",
     "observation": "AUTORIZACION CARGA Y DESCARGA PLACA  T4I-899"    
 }}
+
+{context}
 '''
 
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
@@ -94,42 +95,29 @@ def is_valid_extension(extension):
 def get_file_extension(file_name):
     return file_name.split(".")[-1]
 
-
-def summarize_docs(docs):    
-    llm = ChatOpenAI(model="gpt-4o-mini")
-    prompt = ChatPromptTemplate.from_messages(
-        [("system", PROMPT_USER_TEMPLATE)]
-    )
-    parser = JsonOutputParser(pydantic_object=DocumentFormat)
-    chain = create_stuff_documents_chain(llm, prompt, output_parser=parser)
-
-    # Invoke chain
-    return chain.invoke({"context": docs})    
-
 def encode_image(image_path):
     # Función para codificar la imagen en base64
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
-class DocumentFormat(BaseModel):
-    """Retorna los principales datos del documento"""
+class ReceiptFormat(BaseModel):
+    """Retorna los principales datos del recibo de pago"""
 
-    summarize: str = Field(..., description="Un resumen conciso del documento omitiendo saludos y despedidas.")
-    fecha_doc: str = Field(..., description="La fecha del documento ")
-    tipo_doc: str = Field(..., description="El tipo de documento.")
-    number_doc: str = Field(..., description="El número del documento.")
-    year_doc: str = Field(..., description="El año del documento.")
-    siglas_doc: str = Field(..., description="Las siglas del documento.")
-    oficina_destino: str = Field(..., description="La oficina de destino del documento.")
-    
-
+    number: str = Field(..., description="Número del recibo.")
+    payment_date: str = Field(..., description="Fecha del recibo.")
+    taxpayer_code: str = Field(..., description="Código del contribuyente.")
+    taxpayer_name: str = Field(..., description="Nombre del contribuyente.")
+    payment_hour: str = Field(..., description="Hora del recibo.")
+    amount: float = Field(..., description="Monto del recibo.")
+    gloss: str = Field(..., description="Un resumen del recibo.")
+    observation: str = Field(..., description="Una observación del recibo.")    
 
 # Vistas
 class HomeView(APIView):  
     def get(self, request, format=None):
         return JsonResponse({"message": 'HOLA MUNDO DESDE DJANGO Y DOCKER', "content": 'Por Mario Medina'}) 
 
-class SumarizeView(CreateAPIView):  
+class ExtractTextView(CreateAPIView):  
     def post(self, request, format=None):
         try:            
             file_name = "doc_origin.pdf"
@@ -164,14 +152,15 @@ class SumarizeView(CreateAPIView):
                 os.remove(image_file_path)
 
                 # Configura y usa LangChain con el modelo de OpenAI
-                chat = ChatOpenAI(model="gpt-4o-mini", max_tokens=256)
-                output = chat.invoke(
+                llm = ChatOpenAI(model="gpt-4o-mini", max_tokens=256)                
+                prompt = ChatPromptTemplate.from_messages(
                     [
+                        ("system", PROMPT_USER_TEMPLATE),
                         HumanMessage(
                             content=[
                                 {
                                     "type": "text", 
-                                    "text": PROMPT_USER_TEMPLATE
+                                    "text": "Esta es la imagen del recibo de pago",
                                 },
                                 {
                                     "type": "image_url",
@@ -184,12 +173,10 @@ class SumarizeView(CreateAPIView):
                         )
                     ]
                 )
-                print("******************* OUTPUT *******************")
-                print(output)
-                print("*************************************************")
-
-                
-                result = output.content
+                                            
+                parser = JsonOutputParser(pydantic_object=ReceiptFormat)                
+                chain = create_stuff_documents_chain(llm, prompt, output_parser=parser)                
+                result = chain.invoke(({"context": ""})  )                              
                 response = JsonResponse({"message": '', "content": result})
                 response['Content-Type'] = 'application/json; charset=utf-8'
                 return response
