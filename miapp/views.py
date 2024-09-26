@@ -17,105 +17,88 @@ from langchain_core.output_parsers import JsonOutputParser
 from pdf2image import convert_from_path
 from langchain_core.messages import HumanMessage
 
-import pytesseract
-from PIL import Image
 
-from .serializers import UploadFilePDFSerializer, UploadFileWordSerializer
+from .serializers import UploadFilePDFSerializer
 
 # Constantes
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 PATH_DOCS = os.environ.get('PATH_DOCS')
-VALID_EXTENSIONS = ["pdf", "docx", "doc"]
-PROMPT_SYSTEM_TEMPLATE = '''Eres un asistente que solo habla en JSON. No genere salida que no esté en JSON correctamente formateada.
-Se te va a proporcionar un documento en formato PDF o Word y debes retornar en formato JSON los siguientes campos:
+VALID_EXTENSIONS = ["pdf"]
+PROMPT_USER_TEMPLATE = '''Eres un asistente que solo habla en JSON. No genere salida que no esté en JSON correctamente formateada.
+Se te va a proporcionar una imagen de un recibo de pago  y debes retornar en formato JSON los siguientes campos:
 
-- summarize: <str> Un resumen conciso del documento, omitiendo saludos y despedidas. Máximo 500 caracteres. 
-- fecha_doc: <date> La fecha del documento en formato dd/mm/yyyy.
-- tipo_doc: <str> El tipo de documento.
-- number_doc: <str> El número del documento.
-- year_doc: <str> El año del documento.
-- siglas_doc: <str> Las siglas del documento.
-- oficina_destino: <str> La oficina de destino del documento.
+- number: <str> Número del recibo. Ejemplo 004651223
+- payment_date: <date> La fecha del recibo en formato dd/mm/yyyy. Ejemplo 05/09/2024
+- taxpayer_code: <str> El código del contribuyente. Ejemplo 20487840549
+- taxpayer_name: <str> El nombre del contribuyente. Ejemplo MTM TRANSPORTES DE CARGAR EIRL
+- payment_hour: <time> La hora del recibo en formato hh:mm:ss. Ejemplo 14:30:00
+- amount: <float> El monto del recibo. Ejemplo 68.44
+- gloss: <str> Un resumen del recibo. Ejemplo PERM. DE INGRESO PARA EL TRANSP. ES
+- observation: <str> Una observación del recibo. Ejemplo AUTORIZACION CARGA Y DESCARGA PLACA  T4I-899
 
 
-Ejemplo: Se te pasa el siguiente documento:
+Ejemplo: Se te pasa la siguiente imagen
 
 *******************************************************************************
-“Año del Bicentenario, de la consolidación de nuestra Independencia, y de la conmemoración de las heroicas batallas de Junín y Ayacucho”
+SATP PIURA
+SERVICIO DE ADMINISTRACIÓN TRIBUTARIA
+
+                SERVICIO DE ADMINISTRACIÓN TRIBUTARIA DE PIURA
+                            R.U.C. 20441554436
+
+    Calle Arequipa Nº 1052 Piura - Teléfono 285400 / http://www.satp.gob.pe
+
+PAGINA          : 1 DE 1
+RECIBO No.      : 004651223
+FECHA DE PAGO   : 05/09/2024
+CAJERO          : jgonzalesn
+CONTRIBUYENTE   : (20487840549) MTM TRANSPORTES DE CARGAR EIRL
+
+HORA            : 14:30:00
+UNID/PLACA/LF   :
+
+CONV/PAPEL      : PERM. DE INGRESO PARA EL TRANSP. ES
+
+J66-2024 001/001          00.00
+AUTORIZACION CARGA Y DESCARGA PLACA  T4I-899
 
 
-MEMORANDO Nº002-2024-OGTI/MPP
 
-A		:     ING. JOHAN HUEBNER LADERA ESPINOZA
-                                Jefe de la Oficina de Desarrollo de Tecnologías
- 
-ASUNTO       :	ACTUALIZACION DE REPORTE DE CUMPLIMIENTO DIGITAL
 
-REF.               :	EXP. 07807-2023 PCM SECRETARIA DE GOBIERNO DIGITAL
-	EXP. 010224-2023 PCM SECRETARIA DE GOBIERNO DIGITAL
+                                                                68.44
 
-FECHA          :	San Miguel de Piura, enero 11 de 2024.
-	------------------------------------------------------------------------------------------
-                              Por medio del presente, solicito a usted, se sirva efectuar la revisión y actualización de la documentación sustentante para la Actualización del Reporte de Cumplimiento Digital; según lo descrito en OFICIO NºD00624-2023-PCM-SGTD, presentado por Secretaría de Gobierno y Transformación Digital a través de los expedientes Nº07809 y 010224 del año 2023.
- 
-			Atentamente,
 *******************************************************************************
 
 Debes retornar lo siguiente en formato JSON:
 {{
-   "summarize": "Solicito a usted, se sirva efectuar la revisión y actualización de la documentación sustentante para la Actualización del Reporte de Cumplimiento Digital; según lo descrito en OFICIO NºD00624-2023-PCM-SGTD, presentado por Secretaría de Gobierno y Transformación Digital a través de los expedientes Nº07809 y 010224 del año 2023.",
-   "fecha_doc": "11/01/2024",
-   "tipo_doc": "MEMORANDO",
-   "number_doc": "002",
-   "year_doc": "2024",
-   "siglas_doc": "OGTI/MPP"
-   "oficina_destino": Oficina de Desarrollo de Tecnologías
+    "number": "004651223",
+    "payment_date": "05/09/2024",
+    "taxpayer_code": "20487840549",
+    "taxpayer_name": "MTM TRANSPORTES DE CARGAR EIRL",
+    "payment_hour": "14:30:00",
+    "amount": 68.44,
+    "gloss": "PERM. DE INGRESO PARA EL TRANSP. ES",
+    "observation": "AUTORIZACION CARGA Y DESCARGA PLACA  T4I-899"    
 }}
-
-
-
-{context}'''
-
-# Cargar dependencias desde el archivo JSON
-current_dir = os.path.dirname(os.path.abspath(__file__))
-json_path = os.path.join(current_dir, 'dependencias.json')
-
-with open(json_path, 'r', encoding='utf-8') as file:
-    dependencias = json.load(file)
+'''
 
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-
-# Funciones auxiliares
-def get_docs_from_pdf(file_name):
-    # return PyMuPDFLoader(file_name).load()
-    # return UnstructuredPDFLoader(file_name).load()
-    # return PyPDFium2Loader(file_name).load()
-    # return PDFMinerLoader(file_name).load()
-    return AmazonTextractPDFLoader(file_name, region_name="us-east-1").load()
-    
-
-def get_docs_from_word(file_name):
-    return Docx2txtLoader(file_name).load()
 
 def get_images_from_pdf(file_name):
     images = convert_from_path(file_name)
     return images
 
-def get_file_extension(file_name):
-    return file_name.split(".")[-1]
-
 def is_valid_extension(extension):
     return extension in VALID_EXTENSIONS
 
-def get_serializer_class(extension):
-    if extension == "pdf":
-        return UploadFilePDFSerializer
-    return UploadFileWordSerializer
+def get_file_extension(file_name):
+    return file_name.split(".")[-1]
+
 
 def summarize_docs(docs):    
     llm = ChatOpenAI(model="gpt-4o-mini")
     prompt = ChatPromptTemplate.from_messages(
-        [("system", PROMPT_SYSTEM_TEMPLATE)]
+        [("system", PROMPT_USER_TEMPLATE)]
     )
     parser = JsonOutputParser(pydantic_object=DocumentFormat)
     chain = create_stuff_documents_chain(llm, prompt, output_parser=parser)
@@ -149,7 +132,7 @@ class HomeView(APIView):
 class SumarizeView(CreateAPIView):  
     def post(self, request, format=None):
         try:            
-            file_name = "doc_request.jpg"
+            file_name = "doc_origin.pdf"
             location = f"{PATH_DOCS}/"
 
             dataArchivo = request.FILES.copy()
@@ -162,24 +145,23 @@ class SumarizeView(CreateAPIView):
             if not is_valid_extension(extension):
                 return JsonResponse({"message": 'Tipo de archivo no permitido', "content": ''})
 
-            self.serializer_class = get_serializer_class(extension)
+            self.serializer_class = UploadFilePDFSerializer
             data = self.serializer_class(data=dataArchivo)
 
             if data.is_valid():
-                file_name_save = data.save()
-                file_path = f"{location}{file_name_save}"
+                pdf_name_save = data.save()
+                pdf_file_path = f"{location}{pdf_name_save}"               
                 
+                images = get_images_from_pdf(pdf_file_path)                
+                image_name_save = "payment.jpg"
+                image_file_path = f"{location}{image_name_save}"
+                images[0].save(image_file_path, 'jpeg')
                 
-                images = get_images_from_pdf(file_path)                
-                image_name_save = "recibo.jpg"
-                file_path = f"{location}{image_name_save}"
-                images[0].save(file_path, 'JPEG')
+                base64_image = encode_image(image_file_path) # Codifica la imagen en base64
 
-                image = Image.open(file_path)
-
-                text = pytesseract.image_to_string(image, lang='spa')
-
-                base64_image = encode_image(file_path) # Codifica la imagen en base64
+                # elinina archivos
+                os.remove(pdf_file_path)
+                os.remove(image_file_path)
 
                 # Configura y usa LangChain con el modelo de OpenAI
                 chat = ChatOpenAI(model="gpt-4o-mini", max_tokens=256)
@@ -189,7 +171,7 @@ class SumarizeView(CreateAPIView):
                             content=[
                                 {
                                     "type": "text", 
-                                    "text": "Describe el contenido de la imagen."
+                                    "text": PROMPT_USER_TEMPLATE
                                 },
                                 {
                                     "type": "image_url",
