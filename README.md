@@ -15,13 +15,13 @@ https://github.com/user-attachments/assets/852533fa-cd6a-4302-a97b-b23c0f171d50
 
 - **Django**: Framework web usado para construir la API.
 - **LangChain**: Usado para la manipulación avanzada del lenguaje natural y para interpretar los datos extraídos de los recibos.
-- **OpenAI**: Proporciona la inteligencia artificial que permite interpretar los datos del recibo.
+- **OpenAI Vision**: Proporciona la inteligencia artificial que permite interpretar los datos del recibo.
 
 ## Cómo Funciona
 
 1. **Subir un archivo PDF**: El usuario carga un archivo PDF que contiene la imagen de un recibo de pago del SATP.
 2. **Procesamiento del PDF**: El sistema extrae automáticamente los datos clave del recibo.
-4. **Resultado en JSON**: La información extraída del recibo se devuelve en formato JSON para su uso en otros sistemas o procesos.
+3. **Resultado en JSON**: La información extraída del recibo se devuelve en formato JSON para su uso en otros sistemas o procesos.
 
 ## Ejemplo de Respuesta JSON
 
